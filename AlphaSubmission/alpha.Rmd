@@ -44,10 +44,11 @@ set.seed(2013)
 setwd("/home/burkhart/Software/bmi_551_651_final/AlphaSubmission")
 
 # gene id cols, cell line rows
-expression <- t(read.table("../data/expression.tsv",header=TRUE,sep="\t",quote="",row.names=1,check.names=FALSE))
+expression <- read.table("../data/expression.tsv",header=TRUE,sep="\t",quote="",row.names=1,check.names=FALSE,stringsAsFactors = FALSE)
 
 # subtype cols, cell line rows
-subtypes <- read.table("../data/subtypes.txt",header=TRUE,sep="\t",row.names=1,check.names=FALSE)
+subtypes <- read.table("../data/subtypes.txt",header=TRUE,sep="\t",row.names=1,check.names=TRUE)
+subtypes[,1] <- subtypes[,1] %>% as.numeric()
 
 # drug cols, cell line rows
 training.classes <- t(read.table("../data/training_set_answers.txt",header=TRUE,sep="\t",check.names = FALSE))
@@ -56,19 +57,11 @@ training.classes <- t(read.table("../data/training_set_answers.txt",header=TRUE,
 scoring_and_test_set_id_mappings <- read.table("../data/scoring_and_test_set_id_mappings.csv",header=TRUE,sep=",",check.names=FALSE)
 
 # organize subtypes, expression, train, test, classes...
-#sa <- merge(x=subtypes,y=training_set_answers,by="row.names",all=TRUE,row.names=1)
-#rownames(sa) <- sa$Row.names
-sae <- merge(x=subtypes,y=expression,by="row.names",all=TRUE,row.names=1)
-rownames(sae) <- sae$Row.names
-sae <- sae[,-1]
+sae <- rbind(data.frame(t(subtypes),check.names=FALSE),expression)
 
 # split training data and kaggle holdout
-training.features <- t(sae[colnames(training.classes),])
-col_names <- names(training.features)
-training.features[,col_names] <- lapply(training.features[,col_names] , numeric)
-
-kaggle.features <- t(sae[setdiff(rownames(sae),colnames(training.classes)),])
-kaggle.features[,col_names] <- lapply(kaggle.features[,col_names] , numeric)
+training.features <- sae[,colnames(training.classes)]
+kaggle.features <- sae[setdiff(colnames(sae),colnames(training.classes))]
 ```
 
 ### Scan for missing Data
