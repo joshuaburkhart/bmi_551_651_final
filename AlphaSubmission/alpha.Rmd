@@ -44,21 +44,22 @@ set.seed(2013)
 
 ```{r}
 setwd("/home/burkhart/Software/bmi_551_651_final/AlphaSubmission")
+
 expression <- read.table("../data/expression.tsv",header=TRUE,sep="\t",quote="",row.names=1)
+# gene id rows, cell line columns
 
-# gene id rows, cell type columns
+subtypes <- t(read.table("../data/subtypes.txt",header=TRUE,sep="\t",row.names=1))
+# subtype rows, cell line columns
 
-subtypes <- read.table("../data/subtypes.txt",header=TRUE,sep="\t",row.names=1)
-
-# cell type rows, subtype column
-
-training_set_answers <- read.table("../data/training_set_answers.txt",header=TRUE,sep="\t")
-
-# cell type rows, drug columns
+training_set_answers <- t(read.table("../data/training_set_answers.txt",header=TRUE,sep="\t"))
+# drug rows, cell line columns
 
 scoring_and_test_set_id_mappings <- read.table("../data/scoring_and_test_set_id_mappings.csv",header=TRUE,sep=",")
-
 # Usage, id, drug, cell line columns, values in rows
+
+# organize subtypes, expression, train, test, classes...
+
+classes_and_subtypes <- merge(x=subtypes,y=training_set_answers,all.y=TRUE) %>% merge(x=.,y=subtypes,all=TRUE)
 
 ```
 
