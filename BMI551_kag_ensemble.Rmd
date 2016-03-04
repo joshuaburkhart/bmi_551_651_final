@@ -1,0 +1,87 @@
+---
+title: "Kaggle_ensemble"
+output: html_document
+---
+
+```{r, message=FALSE,warning=FALSE}
+library(foreach)
+library(randomForest)
+library(e1071)
+```
+
+#Build two simple models, SVM and RandomForest, and see if we can house them in an R data structure
+```{r}
+set.seed(10)  
+y<-c(1:1000)  
+x1<-c(1:1000)*runif(1000,min=0,max=2)  
+x2<-(c(1:1000)*runif(1000,min=0,max=2))^2  
+x3<-log(c(1:1000)*runif(1000,min=0,max=2)) 
+```
+
+#split data
+```{r}
+all_data<-data.frame(y,x1,x2,x3)  
+positions <- sample(nrow(all_data),size=floor((nrow(all_data)/4)*3))  
+training<- all_data[positions,]  
+testing<- all_data[-positions,] 
+```
+
+#svm model 
+```{r}
+svm_fit<-svm(y~x1+x2+x3,data=training)
+svm_predictions1<-predict(svm_fit,newdata=testing)  
+print( error_svm1<-sqrt((sum((testing$y-svm_predictions1)^2))/nrow(testing)) )
+```
+
+#random forest model
+```{r}
+rf_fit<-randomForest(y~x1+x2+x3,data=training,ntree=500) 
+rf_predictions1<-predict(rf_fit,newdata=testing)
+print( error_rf1<-sqrt((sum((testing$y-rf_predictions1)^2))/nrow(testing)) )
+```
+
+#test storing the models in an R data structure
+```{r}
+model_container <- list(type=any)
+model_container[[1]] <- svm_fit
+model_container[[2]] <- rf_fit
+```
+
+#use the stored models as an ensemble
+```{r}
+#use predict method with svm model in our model_list
+svm_predictions<-predict(model_container[[1]],newdata=testing)  
+#MSE
+error_svm<-sqrt((sum((testing$y-svm_predictions)^2))/nrow(testing))
+
+#use predict method with rf model in out model_list
+rf_predictions<-predict(model_container[[2]],newdata=testing)
+#MSE
+error_rf <- sqrt((sum((testing$y-rf_predictions)^2))/nrow(testing))
+
+#ensemble with svm and rf models stored in the model_list
+predictions<-(svm_predictions+rf_predictions)/2  
+#MSE
+print( error_ens_sr<-sqrt((sum((testing$y-predictions)^2))/nrow(testing)) )
+
+#we can weight different models more than others
+#give more weight to the svm
+predictions1<-(svm_predictions*2+rf_predictions)/3
+print( error_ens_sr1<-sqrt((sum((testing$y-predictions1)^2))/nrow(testing)) )
+```
+
+#example bagging function
+```{r eval=FALSE}
+#Example Bagging function used on the svm
+length_divisor<-6  
+iterations<-5000  
+predictions<-foreach(m=1:iterations,.combine=cbind) %do% {  
+  training_positions <- sample(nrow(training), size=floor((nrow(training)/length_divisor)))  
+  train_pos<-1:nrow(training) %in% training_positions  
+  svm_fit<-svm(y~x1+x2+x3,data=training[train_pos,])  
+  predict(svm_fit,newdata=testing)  
+}  
+svm2_predictions<-rowMeans(predictions)  
+#svm performs worse after bagging
+error_svm2<-sqrt((sum((testing$y-svm2_predictions)^2))/nrow(testing)) 
+```
