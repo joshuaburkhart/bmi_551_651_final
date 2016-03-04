@@ -43,7 +43,7 @@ set.seed(2013)
 ### Load Data
 
 ```{r}
-setwd("/home/burkhart/Software/bmi_551_651_final/AlphaSubmission")
+setwd("/Users/joshuaburkhart/SoftwareProjects/bmi_551_651_final/AlphaSubmission")
 
 # gene id cols, cell line rows
 expression <-
@@ -101,11 +101,11 @@ sum(is.na(training.classes))
 ### Split with random sampling
 
 index <-
-  sample(1:ncol(training.features),round(0.9 * ncol(training.features)))
+  sample(1:ncol(training.features),round(0.7 * ncol(training.features)))
 training.features_train <- training.features[,index]
-training.classes_train <- training.classes[1,index]
+training.classes_train <- training.classes[3,index]
 training.features_test <- training.features[,-index]
-training.classes_test <- training.classes[1,-index]
+training.classes_test <- training.classes[3,-index]
 ```
 
 ### Cross Validation Loop
@@ -122,7 +122,7 @@ for (cv_idx in seq(1:3)) {
   
   # x
   index <-
-    sample(1:ncol(training.features_train),round(0.9 * ncol(training.features_train)))
+    sample(1:ncol(training.features_train),round(0.7 * ncol(training.features_train)))
   training.features_train_cv <- training.features_train[,index]
   training.classes_train_cv <- training.classes_train[index]
   training.features_validation_cv <-
@@ -132,7 +132,7 @@ for (cv_idx in seq(1:3)) {
   ### Wilcoxan Rank Sum (Univariate Nonparametric Filter) for x dataset
   print(c(cv_idx,'Wilcoxan Rank Sum'))
   
-  x.P_LIM = .01
+  x.P_LIM = .005
   x.train_w_idx = vector()
   
   # only use for numeric expression data
@@ -142,7 +142,7 @@ for (cv_idx in seq(1:3)) {
     if (x.w$p.value < x.P_LIM) {
       x.train_w_idx <-
         append(x.train_w_idx,i) #store indices of significant features
-      print(c(x.w$p.value,"sufficient p-value for",i))
+      #print(c(x.w$p.value,"sufficient p-value for",i))
     }
   }
   
@@ -174,23 +174,23 @@ for (cv_idx in seq(1:3)) {
   print(c(cv_idx,'SVM'))
   
   #change to markov blanket features
-  training.svm_input <-
+  training.train_svm_input <-
     data.frame(t(training.features_train_w[x.mhc,]), check.names = FALSE)
   
   #train model
   x.model <-
-    svm(training.svm_input,training.classes_train_cv,kernel = "linear")
+    svm(x=training.train_svm_input,y=training.classes_train_cv)
   
   ### Validation (on hold out data)
   print(c(cv_idx,'Validation'))
   
   #filter features
-  training.svm_input <-
+  training.validation_svm_input <-
     data.frame(t(training.features_validation_cv[x.mhc,]), check.names = FALSE)
   
   #test
   x.class_ag <-
-    table(predict(x.model,training.svm_input),training.classes_validation_cv) %>%
+    table(round(predict(x.model,training.validation_svm_input)),training.classes_validation_cv) %>%
     classAgreement()
   
   #misclassification rate
@@ -220,7 +220,7 @@ training.svm_input <-
 
 #test
 x.class_ag <-
-  table(predict(x.cv_svm,training.svm_input),training.classes_test) %>%
+  table(round(predict(x.cv_svm,training.svm_input)),training.classes_test) %>%
   classAgreement()
 
 #misclassification rate
