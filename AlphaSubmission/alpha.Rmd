@@ -130,14 +130,15 @@ for (drug_idx in 1:nrow(training.classes))
     
     x.P_LIM = .005
     x.train_w_idx = vector()
+    x.train_p_val = vector()
     
     for (i in 1:nrow(training.features_train_cv)) {
       x.w <-
         wilcox.test(unlist(training.features_train_cv[i,]) ~ training.classes_train_cv, data =
                       training.features_train_cv)
       if (x.w$p.value < x.P_LIM) {
-        x.train_w_idx <-
-          append(x.train_w_idx,i) #store indices of significant features
+        x.train_w_idx <-append(x.train_w_idx,i)
+        x.train_p_val <- append(x.train_p_val,x.w$p.value)
         print(c(x.w$p.value,"sufficient p-value for",i))
       }
     }
@@ -146,6 +147,12 @@ for (drug_idx in 1:nrow(training.classes))
     
     if (x.train_w_idx %>% length > 0)
     {
+      # can't build a bayesian net with > 250 nodes
+      if(x.train_w_idx %>% length > 250){
+        print(c("> 250 features with p-values <",x.P_LIM,"... trimming to 250..."))
+        x.train_w_idx <- x.train_w_idx[order(as.double(x.train_p_val))[1:250]]
+      }
+      
       #now we can retain only our selected columns
       training.features_train_w <-
         training.features_train_cv[x.train_w_idx,]
