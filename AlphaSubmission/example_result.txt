@@ -1,0 +1,26 @@
+             600MPE AU565 BT549 HCC1187 HCC1954 HCC3153 LY2 MCF10A MCF12A MCF7 MDAMB157 MDAMB231
+CGC-11047         1     1     1       1       1       1   0      0      0    0        1        1
+Carboplatin       0     1     1       1       1       1   0      1      1    0        1        1
+Cisplatin         0     1     1       1       1       1   1      1      1    1        1        1
+GSK1070916        0     0     0       1       0       1   0      0      0    0        1        0
+GSK1120212        0     1     1       1       0       1   1      1      1    1        1        1
+GSK461364         1     1     1       1       1       1   1      1      1    0        1        1
+Geldanamycin      0     0     0       0       0       0   1      1      1    0        0        0
+Oxaliplatin       0     1     0       1       0       0   1      1      1    1        0        0
+PF-3084014        1     1     0       1       0       0   0      0      0    0        0        0
+PF-3814735        0     0     1       0       0       1   0      1      1    0        1        1
+PF-4691502        1     1     0       0       1       1   0      0      0    1        1        0
+Paclitaxel        1     1     1       1       1       1   1      1      1    1        0        1
+             MDAMB361 SKBR3
+CGC-11047           0     1
+Carboplatin         0     1
+Cisplatin           0     1
+GSK1070916          0     1
+GSK1120212          0     1
+GSK461364           0     1
+Geldanamycin        0     1
+Oxaliplatin         0     1
+PF-3084014          0     1
+PF-3814735          0     0
+PF-4691502          1     1
+Paclitaxel          0     1
