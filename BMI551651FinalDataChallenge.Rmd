@@ -1,0 +1,113 @@
+---
+title: "BMI 551/651 Final Data Challenge"
+author: "Kristen Stevens"
+date: "March 3, 2016"
+output: pdf_document
+---
+
+## Goals
+
+Predict whether a breast cancer cell line will respond to treatment with a given drug using the subtype of the tumor and the gene expression data provided. Submissions can either be binary or contain values between 0 and 1 so that the area under the ROC curve can be computed for different threshold cutoffs between 0 and 1.
+
+Response in this context means that the concentration of drug needed to inhibit cell growth by 50% was above the median for all cell lines tested (not just those used above). There is a lot to be said about whether this measure reflects how the drug will work in patients. 
+
+One important aspect of this type of challenge is to ascertain whether the data is sufficient to make meaningful inferences.
+
+## Data
+
+The data used comes from this study below by Dr. Joe Gray, Dr. Laura Heiser and many others of whom are here at OHSU: Anneleen Daemen et al., “Modeling Precision Treatment of Breast Cancer,” Genome Biology 14, no. 10 (2013): R110, doi:10.1186/gb-2013-14-10-r110.
+
+There are 25 cell lines and 12 drugs in the training set. The responses are coded as 0 = cell line doesn't respond to drug, 1 = cell line does respond to drug. (This data originally had 70 cell lines and 90 drugs, but in order to avoid issues with missing data we have restricted the challenge to those data seen here. It is generally too small to be of use in a real study.)
+
+You are provided with: 
+
+1) expression.txt - a tab-delimited text file containing expression values for 18,632 genes for each of the 39 cell lines.
+
+2) subtypes.txt - a tab-delimited text file of subtypes (basal, luminal, claudin-low and normal-like) for each of 39 cell lines.
+
+3) training_set_answers.txt - a tab-delimited text file of the correct classification of 0 (non-responsive) or 1 (responsive) for each combination of 25 cell lines and 12 drugs.
+
+4) scoring_and_test_set_id_mappings.csv - a comma-delimited text file of the id used by Kaggle for each of the cell line/drug combinations in the scoring set and test set. The first 108 values are the scoring set (9 cell lines and 12 drugs) and the last 60 are the final test set (5 cell lines 12 drugs). Scores on the final test set will not be shown until the competition is over.
+
+5) rand_sub_cont.csv - a sample submission file in the correct format with random predictions between 0 and 1. The calculation of the AUROC value summarizes the performance of these guesses at all thresholds between 0 and 1.
+
+## Exploratory Data Analysis
+
+```{r global_options, echo=TRUE}
+knitr::opts_chunk$set(fig.path = "Figs/", message = FALSE, warning = FALSE, echo = TRUE, error = TRUE, include = TRUE, fig.width = 11, comment = NA)
+```
+
+```{r load_packages}
+library(dplyr)
+library(plyr)
+library(ggplot2)
+library(psych)
+library(GGally)
+library(ggfortify)
+library(gsl)
+library(MASS)
+library(MBESS)
+library(broom)
+```
+
+```{r import_data}
+expression <- read.table(file = "/Users/kstevensvt/bmi_551_651_final/expression.txt", sep = "\t")
+subtypes <- read.table(file = "/Users/kstevensvt/bmi_551_651_final/subtypes.txt", header=TRUE, sep = "\t")
+answers <- read.table(file = "/Users/kstevensvt/bmi_551_651_final/training_set_answers.txt", sep = "\t")
+kaggleID <- read.table(file = "/Users/kstevensvt/bmi_551_651_final/scoring_and_test_set_id_mappings-2.csv", header=TRUE, sep = ",")
+sample <- read.table(file = "/Users/kstevensvt/bmi_551_651_final/rand_sub_cont.csv", header=TRUE, sep = ",")
+```
+
+```{r hello_data}
+dim(expression)
+names(expression)
+rownames(expression)[1:10]
+dim(subtypes)
+head(subtypes)
+dim(answers)
+names(answers)
+rownames(answers)[1:10]
+dim(kaggleID)
+head(kaggleID)
+dim(sample)
+head(sample)
+```
+
+There are only 6427 observation in expression.txt, not 18,632 genes. Remaining data imported as expected.
+
+```{r missing_data}
+sum(is.na(expression))
+sapply(expression, function(x)  sum(is.na(x)))
+sum(is.na(subtypes))
+sum(is.na(answers))
+sum(is.na(kaggleID))
+sum(is.na(sample))
+```
+
+There are no missing data except for expression data for 1 gene for each cell line.
+
+```{r}
+t_expression <- data.frame(t(expression)) # code does not work
+full <- join(subtypes, t_expression)
+```
+
+Tried to add subtype and drug response to expression data but failed.
+
+```{r}
+subtypes <- subtypes[with(subtypes, order(subtype)),]
+colnames(expression)[1] <- "184A1"
+colnames(expression)[2] <- "600MPE"
+rownames(subtypes) <- subtypes[,1]
+subtypes[colnames(expression),2]
+boxplot(expression, main = "Gene Expression Distributions Across Cell Lines", ylab = "Probe Intensities", xlab = "", col = subtypes[colnames(expression),2], las = 2, par(mar=c(8,4,4,2)+.1))
+mtext("Cell Lines", side = 1, line = 7)
+legend("topright", legend = unique(subtypes[colnames(expression),2]), cex = 0.7)
+```
+
+Reorder cell lines so they are grouped by subtype. Add legend.
+
+Make another boxplot, this time group by 25 training, 14 test displayed, 5 test hidden (if possible, keep color coding for subtypes). Report number of each subtype within each of the 3 groups.
+
+We should split training set into training and validation sets.
+
+subtypes <- subtypes[with(subtypes, order(subtype)),]
