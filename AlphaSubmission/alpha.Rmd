@@ -247,9 +247,9 @@ kaggle.classes %>% str()
 ```
 
 ```{r}
-mapping <- read.csv("../data/scoring_and_test_set_id_mappings.csv",check.names=FALSE)
+mapping <- read.csv("~/bmi_551_651_final/data/scoring_and_test_set_id_mappings.csv",check.names=FALSE)
 
-kaggle.classes <- read.csv("../AlphaSubmission/example_result.txt", sep="", stringsAsFactors=FALSE)
+kaggle.classes <- read.csv("~/bmi_551_651_final/AlphaSubmission/example_result.txt", sep="", stringsAsFactors=FALSE)
 
 kaggle.out <- data.frame()
 
@@ -258,8 +258,8 @@ for(row in 1:nrow(mapping))
   kaggle.out <- rbind(kaggle.out,c(mapping[row,"id"],kaggle.classes[mapping[row,"drug"],mapping[row,"cellline"]]))
 }
 colnames(kaggle.out)<-c('id','value')
-zz <- file(description="~/bmi_551_651_final/alpha_out.txt",'w')
-write.csv(kaggle.out,zz,row.names=FALSE)
+zz <- file(description="~/bmi_551_651_final/alpha_out.csv",'w')
+write.csv(kaggle.out,zz,row.names=FALSE, quote = FALSE)
 close(zz)
 
 ```
