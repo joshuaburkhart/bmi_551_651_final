@@ -245,3 +245,16 @@ colnames(kaggle.classes) <- colnames(kaggle.features)
 
 kaggle.classes %>% str()
 ```
+
+```{r}
+mapping <- read.csv("../data/scoring_and_test_set_id_mappings.csv",check.names=FALSE)
+
+kaggle.out <- data.frame()
+
+for(row in 1:nrow(mapping))
+{
+  kaggle.out <- rbind(kaggle.out,c(mapping[row,"id"],kaggle.classes[mapping[row,"drug"],mapping[row,"cellline"]]))
+}
+
+write.csv("../data/alpha_out.txt",kaggle.out)
+```
