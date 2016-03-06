@@ -1,5 +1,5 @@
 ---
-title: "Linear SVM"
+title: "Polynomial SVM"
 author: "Joshua Burkhart"
 date: "March 6, 2016"
 output:
@@ -8,7 +8,7 @@ output:
     fig_height: 6
     latex_engine: xelatex
 ---
-# BMI 651: Linear SVM
+# BMI 651: Polynomial SVM
 
 ```{r global_options, echo=FALSE, include=FALSE, error=FALSE}
 knitr::opts_chunk$set(
@@ -257,7 +257,7 @@ for(row in 1:nrow(mapping))
 }
 colnames(kaggle.out)<-c('id','value')
 
-fptr <- file(description="./linearSVM_out.csv",'w')
+fptr <- file(description="./polynomialSVM_out.csv",'w')
 write.csv(kaggle.out,fptr,row.names=FALSE, quote = FALSE)
 close(fptr)
 ```
