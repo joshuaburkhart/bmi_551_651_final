@@ -43,7 +43,7 @@ set.seed(2013)
 ### Load Data
 
 ```{r}
-setwd("~/Software/bmi_551_651_final/JoshBeta")
+setwd("~/SoftwareProjects/bmi_551_651_final/JoshBeta")
 
 # gene id cols, cell line rows
 expression <-
