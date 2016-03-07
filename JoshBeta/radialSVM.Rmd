@@ -112,13 +112,13 @@ for (drug_idx in 1:nrow(training.classes))
   x.cv_err <- Inf
   x.cv_svm <- NA
 
-  for (cv_idx in seq(1:5)) {
+  for (cv_idx in seq(1:3)) {
     ### Split Training & Validation sets with random sampling (Monte Carlo cross validation)
     print(c(cv_idx,'Split Training & Validation sets'))
 
     # 5-fold Cross Validation
     index <-
-      sample(1:ncol(training.features_train),round(0.8 * ncol(training.features_train)))
+      sample(1:ncol(training.features_train),round(0.9 * ncol(training.features_train)))
     training.features_train_cv <- training.features_train[,index]
     training.classes_train_cv <- training.classes_train[index]
     training.features_validation_cv <-
@@ -147,10 +147,10 @@ for (drug_idx in 1:nrow(training.classes))
 
     if (x.train_w_idx %>% length > 0)
     {
-      # can't build a bayesian net with > 250 nodes
-      if(x.train_w_idx %>% length > 250){
-        print(c("> 250 features with p-values <",x.P_LIM,"... trimming to 250..."))
-        x.train_w_idx <- x.train_w_idx[order(as.double(x.train_p_val))[1:250]]
+      # can't build a bayesian net with > 50 nodes
+      if(x.train_w_idx %>% length > 50){
+        print(c("> 50 features with p-values <",x.P_LIM,"... trimming to 50..."))
+        x.train_w_idx <- x.train_w_idx[order(as.double(x.train_p_val))[1:50]]
       }
 
       #now we can retain only our selected columns
@@ -184,7 +184,7 @@ for (drug_idx in 1:nrow(training.classes))
 
       #train model
       x.model <-
-        svm(x = training.train_svm_input,y = as.factor(training.classes_train_cv),kernel="radial")
+        svm(x = training.train_svm_input,y = training.classes_train_cv,kernel="radial")
 
       ### Validation (on hold out data)
       print(c(cv_idx,'Validation'))
@@ -195,9 +195,9 @@ for (drug_idx in 1:nrow(training.classes))
 
       #test
       x.class_ag <-
-        table(predict(
+        table(round(predict(
           x.model,training.validation_svm_input
-        ),training.classes_validation_cv) %>%
+        )),training.classes_validation_cv) %>%
         classAgreement()
 
       #misclassification rate
