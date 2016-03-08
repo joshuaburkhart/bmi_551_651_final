@@ -1,0 +1,62 @@
+---
+title: "Posterior Ensemble"
+author: "Joshua Burkhart"
+date: "March 7, 2016"
+output: 
+  pdf_document: 
+    fig_width: 9
+    fig_height: 6
+    latex_engine: xelatex
+---
+# BMI 651: Posterior Ensemble
+
+```{r global_options, echo=FALSE, include=FALSE, error=FALSE}
+knitr::opts_chunk$set(
+  fig.path = "Figs/",
+  message = FALSE,
+  warning = FALSE,
+  include = TRUE,
+  echo = TRUE,
+  error = TRUE,
+  fig.width = 11,
+  comment = NA
+)
+```
+
+```{r, echo=FALSE, include=FALSE}
+library(MASS)
+library(plyr) #this must be loaded before dplyr
+library(dplyr)
+library(ggplot2)
+library(broom)
+library(knitr)
+library(magrittr)
+library(reshape2)
+library(infotheo)
+library(stats)
+library(car)
+library(e1071)
+library(bnlearn)
+library(elmNN)
+library(gbm)
+library(stats)
+set.seed(2013)
+```
+
+## Load Results
+```{r}
+setwd("~/SoftwareProjects/bmi_551_651_final/JoshBeta")
+
+res.1 <- read.csv("./tuningELM_out.csv")
+res.2 <- read.csv("./radbasELM_out.csv")
+
+posterior.res <- t(rbind(res.1[,1],(res.1[,2] + res.2[,2])/2))
+
+colnames(posterior.res) <- colnames(res.1)
+```
+
+```{r}
+fptr <- file(description="./posteriorEnsemble_out.csv",'w')
+write.csv(posterior.res,fptr,row.names=FALSE, quote = FALSE)
+close(fptr)
+```
