@@ -1,6 +1,6 @@
 ---
 title: "Random Forest"
-author: "Mark"
+author: "JB edited by MK"
 date: "March 7, 2016"
 output: 
   pdf_document: 
