@@ -163,96 +163,73 @@ x.all_features <- c(x.all_features,1437,1555,1905,2041,2080,2386,2476,2734,2781,
 ```{r}
 training.features_train <- data.frame()
 training.classes_train <- numeric()
-x.cv_mhc <- NA
-x.cv_err <- Inf
-x.cv_svm <- NA
 training.features_ncol <- numeric()
 x.cv_boost <- numeric()
 x.avg_err <- 1
-x.SPLIT <- 0.7
-x.ERR_LIM <- 0.2
+x.SPLIT <- 0.5
+x.ERR_LIM <- 0.1
 
 for (drug_idx in 1:nrow(training.classes))
 {
   training.features_train <- cbind(cbind(cbind(training.features,training.features),training.features),training.features)
   training.classes_train <- c(c(c(training.classes[drug_idx,],training.classes[drug_idx,]),training.classes[drug_idx,]),training.classes[drug_idx,])
-  
+
   ### Cross Validation Loop
-  
+
   # variables to store loop results
-  x.cv_mhc <- NA
-  x.cv_err <- Inf
-  x.cv_svm <- NA
-  x.tot_err <- vector()
-  
-  for (kern_idx in 1:2)
+  x.cv_err_g <- Inf
+  x.cv_svm_g <- NA
+
+  for (kern_idx in 1:4)
   {
-    svm_kern <- c("radial","sigmoid")[mod(kern_idx,2) + 1]
+    svm_kern <- c("radial","sigmoid","linear","polynomial")[mod(kern_idx,4) + 1]
     training.features_ncol <- round(x.SPLIT * ncol(training.features_train))
     x.cv_boost <- rep(1 / ncol(training.features_train),ncol(training.features_train))
-    
+    x.cv_err <- Inf
+    x.cv_svm <- NA
+
     for (loop in 1:10)
     {
       ### Split Training & Validation sets with random sampling (Monte Carlo cross validation)
-      
+
       # 5-fold Cross Validation
       index <- sample(1:ncol(training.features_train),training.features_ncol,replace = TRUE,prob = log(x.cv_boost + 1))
-      
+
       training.features_train_cv <- training.features_train[,index]
       training.classes_train_cv <- training.classes_train[index]
-      training.features_validation_cv <-
-      training.features_train[,-index]
-      training.classes_validation_cv <-
-      training.classes_train[-index]
-      
+      training.features_validation_cv <- training.features_train[,-index]
+      training.classes_validation_cv <- training.classes_train[-index]
+
       if (x.all_features %>% length > 0)
       {
         x.all_features_cv <- x.all_features
-        
+
         #now we can retain only our selected columns
-        training.features_train_w <-
-        training.features_train_cv[x.all_features_cv,]
-        
+        training.features_train_w <- training.features_train_cv[x.all_features_cv,]
+
         #add the class labels to the feature data frame
-        training.train_svm_input <-
-        data.frame(t(training.features_train_w),check.names = FALSE)
-        
+        training.train_svm_input <- data.frame(t(training.features_train_w),check.names = FALSE)
+
         #train model
-        
-        print(c('training',svm_kern,'iter',loop))
-        
+
         x.model <- svm(x = training.train_svm_input,y = training.classes_train_cv,kernel = svm_kern)
-        
+
         ### Validation (on hold out data)
-        
+
         #filter features
-        training.validation_svm_input <-
-        data.frame(t(training.features_validation_cv[x.all_features_cv,]), check.names = FALSE)
-        
+        training.validation_svm_input <- data.frame(t(training.features_validation_cv[x.all_features_cv,]), check.names = FALSE)
+
         #test
         x.prediction_cv <- predict(x.model,training.validation_svm_input)
-        
-        x.class_ag <-
-        table(round(
-          unlist(
-            lapply(x.prediction_cv,
-                  function(x) {ifelse(x < 0,0,ifelse(x > 1,1,x))})
-                )
-              ),
-              training.classes_validation_cv) %>%
-        classAgreement()
-        
+
+        x.class_ag <- table(round(unlist(lapply(x.prediction_cv,function(x) {ifelse(x < 0,0,ifelse(x > 1,1,x))}))),training.classes_validation_cv) %>% classAgreement()
+
         #misclassification rate
         x.err_rate <- 1 - x.class_ag$diag
-        
-        print(c('drug iter',drug_idx,'kern',kern_idx,'loop',loop,'error rate:',x.err_rate,'best:',x.cv_err))
-        
-        x.tot_err <- c(x.tot_err,x.err_rate)
-        
+
         # allows boosted cv loops to store results despite higher error rates
-        if (x.err_rate / loop < x.cv_err ||
-            x.err_rate < 0.1) {
-          x.cv_mhc <- x.all_features_cv
+        if (x.err_rate / loop < x.cv_err || x.err_rate < x.ERR_LIM)
+        {
           x.cv_err <- x.err_rate
           x.cv_svm <- x.model
           x.svm_kern <- svm_kern
@@ -262,35 +239,33 @@ for (drug_idx in 1:nrow(training.classes))
       {
         print("Ignoring this cv loop because wilcoxon rank sum routine filtered all features from fold. Is the wilcoxon rank sum p-value set too low?")
       }
-      
+
       miscalled_idxs <- which(abs(round(x.prediction_cv) - training.classes_validation_cv)==1)
-      
+
       ### Boosting probabilities
-      x.cv_boost[miscalled_idxs] <- x.cv_boost[miscalled_idxs] * 2
+      x.cv_boost[miscalled_idxs] <- x.cv_boost[miscalled_idxs] * 5
+    }
+    
+    if (x.cv_err < x.cv_err_g)
+    {
+      x.cv_err_g <- x.cv_err
+      x.cv_svm_g <- x.cv_svm
+      x.svm_kern_g <- x.svm_kern
     }
   }
-  x.avg_err <- c(x.avg_err,x.cv_err)
-  
-  print(c("loop:",drug_idx,'avg_err:', x.cv_err))
-  
-  ### Loop Results
-  
-  # markov blanket, & error rate
-  #print(c(x.cv_mhc,"best cv error rate:",x.cv_err))
-  
+  x.avg_err <- c(x.avg_err,x.cv_err_g)
+
   ### Predict Kaggle Holdout
-  
+
   #filter features
-  kaggle.svm_input <-
-  data.frame(t(kaggle.features[x.cv_mhc,]), check.names = FALSE)
-  
+  kaggle.svm_input <- data.frame(t(kaggle.features[x.all_features,]), check.names = FALSE)
+
   #test
-  kaggle.predictions <-
-  predict(x.cv_svm,kaggle.svm_input)
-  
+  kaggle.predictions <- predict(x.cv_svm_g,kaggle.svm_input)
+  x.prediction_cv <-    predict(x.model,   training.validation_svm_input)
+
   kaggle.classes <- rbind(kaggle.classes,unlist(lapply(kaggle.predictions,function(x) {ifelse(x < 0,0,ifelse(x > 1,1,x))})))
 }
-
 rownames(kaggle.classes) <- rownames(training.classes)
 colnames(kaggle.classes) <- colnames(kaggle.features)
 
