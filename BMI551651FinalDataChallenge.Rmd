@@ -111,3 +111,8 @@ Make another boxplot, this time group by 25 training, 14 test displayed, 5 test 
 We should split training set into training and validation sets.
 
 subtypes <- subtypes[with(subtypes, order(subtype)),]
+
+```{r}
+for i in 
+```
+

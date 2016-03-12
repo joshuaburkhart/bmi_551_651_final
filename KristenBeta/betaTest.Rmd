@@ -1,0 +1,139 @@
+---
+title: "Alpha Submission"
+author: "Joshua Burkhart"
+date: "March 3, 2016"
+output: 
+pdf_document: 
+fig_width: 9
+fig_height: 6
+latex_engine: xelatex
+---
+# BMI 651: Alpha Submission
+
+```{r global_options, echo=FALSE, include=FALSE, error=FALSE}
+knitr::opts_chunk$set(
+  fig.path = "Figs/",
+  message = FALSE,
+  warning = FALSE,
+  include = TRUE,
+  echo = TRUE,
+  error = TRUE,
+  fig.width = 11,
+  comment = NA
+)
+```
+
+```{r, echo=FALSE, include=FALSE}
+library(MASS)
+library(plyr) #this must be loaded before dplyr
+library(dplyr)
+library(ggplot2)
+library(broom)
+library(knitr)
+library(magrittr)
+library(reshape2)
+library(infotheo)
+library(stats)
+library(car)
+library(e1071)
+library(bnlearn)
+set.seed(2013)
+```
+
+### Load Data
+
+```{r}
+# setwd("~/Software/bmi_551_651_final/AlphaSubmission")
+
+# gene id cols, cell line rows
+expression <-
+  read.table(
+    "/Users/kstevensvt/bmi_551_651_final/KristenBeta/data/expression.tsv",header = TRUE,sep = "\t",quote = "",row.names =
+      1,check.names = FALSE,stringsAsFactors = FALSE
+  )
+
+# subtype cols, cell line rows
+subtypes <-
+  read.table(
+    "/Users/kstevensvt/bmi_551_651_final/KristenBeta/data/subtypes.txt",header = TRUE,sep = "\t",row.names = 1,check.names =
+      TRUE
+  )
+subtypes[,1] <- subtypes[,1] %>% as.numeric()
+
+# drug cols, cell line rows
+training.classes <-
+  t(
+    read.table(
+      "/Users/kstevensvt/bmi_551_651_final/KristenBeta/data/training_set_answers.txt",header = TRUE,sep = "\t",check.names = FALSE
+    )
+  )
+training.classes[,1:ncol(training.classes)] <-
+  training.classes[,1:ncol(training.classes)] %>% as.numeric()
+
+# Usage, id, drug, cell line columns, values in rows
+scoring_and_test_set_id_mappings <-
+  read.table(
+    "/Users/kstevensvt/bmi_551_651_final/KristenBeta/data/scoring_and_test_set_id_mappings.csv",header = TRUE,sep = ",",check.names =
+      FALSE
+  )
+
+# organize subtypes, expression, train, test, classes...
+sae <- rbind(data.frame(t(subtypes),check.names = FALSE),expression)
+
+# split training data and kaggle holdout
+training.features <- sae[,colnames(training.classes)]
+kaggle.features <-
+  sae[setdiff(colnames(sae),colnames(training.classes))]
+```
+
+### Scan for missing Data
+
+```{r}
+sum(is.na(training.features))
+sum(is.na(kaggle.features))
+sum(is.na(training.classes))
+```
+
+### Training and Kaggle Sets
+
+```{r}
+require(adabag)
+kaggle.classes <- data.frame()
+
+for (drug_idx in 1:nrow(training.classes))
+{
+  transposed_features <- data.frame(t(training.features))
+  transposed_features[["drug"]] <- training.classes[drug_idx,]
+  
+  train.bagging = bagging(drug~., data = transposed_features, mfinal = 10)
+
+  #test
+  #train.predbagging <- predict.bagging(train.bagging, newdata = )
+
+  
+  #kaggle.classes <- rbind(kaggle.classes,kaggle.predictions)
+}
+
+rownames(kaggle.classes) <- rownames(training.classes)
+colnames(kaggle.classes) <- colnames(kaggle.features)
+
+kaggle.classes %>% str()
+```
+
+```{r}
+mapping <- read.csv("~/bmi_551_651_final/data/scoring_and_test_set_id_mappings.csv",check.names=FALSE)
+
+kaggle.classes <- read.csv("~/bmi_551_651_final/AlphaSubmission/example_result.txt", sep="", stringsAsFactors=FALSE)
+
+kaggle.out <- data.frame()
+
+for(row in 1:nrow(mapping))
+{
+  kaggle.out <- rbind(kaggle.out,c(mapping[row,"id"],kaggle.classes[mapping[row,"drug"],mapping[row,"cellline"]]))
+}
+colnames(kaggle.out)<-c('id','value')
+zz <- file(description="~/bmi_551_651_final/alpha_out.csv",'w')
+write.csv(kaggle.out,zz,row.names=FALSE, quote = FALSE)
+close(zz)
+
+```
