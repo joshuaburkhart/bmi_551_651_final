@@ -1,0 +1,263 @@
+---
+title: "Linear SVM"
+author: "Joshua Burkhart"
+date: "March 6, 2016"
+output: 
+  pdf_document: 
+    fig_width: 9
+    fig_height: 6
+    latex_engine: xelatex
+---
+# BMI 651: Linear SVM
+
+```{r global_options, echo=FALSE, include=FALSE, error=FALSE}
+knitr::opts_chunk$set(
+  fig.path = "Figs/",
+  message = FALSE,
+  warning = FALSE,
+  include = TRUE,
+  echo = TRUE,
+  error = TRUE,
+  fig.width = 11,
+  comment = NA
+)
+```
+
+```{r, echo=FALSE, include=FALSE}
+library(MASS)
+library(plyr) #this must be loaded before dplyr
+library(dplyr)
+library(ggplot2)
+library(broom)
+library(knitr)
+library(magrittr)
+library(reshape2)
+library(infotheo)
+library(stats)
+library(car)
+library(e1071)
+library(bnlearn)
+set.seed(2013)
+```
+
+### Load Data
+
+```{r}
+setwd("~/SoftwareProjects/bmi_551_651_final/JoshBeta")
+
+# gene id cols, cell line rows
+expression <-
+  read.table(
+    "../data/expression.tsv",header = TRUE,sep = "\t",quote = "",row.names =
+      1,check.names = FALSE,stringsAsFactors = FALSE
+  )
+
+# subtype cols, cell line rows
+subtypes <-
+  read.table(
+    "../data/subtypes.txt",header = TRUE,sep = "\t",row.names = 1,check.names =
+      TRUE
+  )
+subtypes[,1] <- subtypes[,1] %>% as.numeric()
+
+# drug cols, cell line rows
+training.classes <-
+  t(
+    read.table(
+      "../data/training_set_answers.txt",header = TRUE,sep = "\t",check.names = FALSE
+    )
+  )
+training.classes[,1:ncol(training.classes)] <-
+  training.classes[,1:ncol(training.classes)] %>% as.numeric()
+
+# Usage, id, drug, cell line columns, values in rows
+scoring_and_test_set_id_mappings <-
+  read.table(
+    "../data/scoring_and_test_set_id_mappings.csv",header = TRUE,sep = ",",check.names =
+      FALSE
+  )
+
+# organize subtypes, expression, train, test, classes...
+sae <- rbind(data.frame(t(subtypes),check.names = FALSE),expression)
+
+# split training data and kaggle holdout
+training.features <- sae[,colnames(training.classes)]
+kaggle.features <-
+  sae[setdiff(colnames(sae),colnames(training.classes))]
+```
+
+### Scan for missing Data
+
+```{r}
+sum(is.na(training.features))
+sum(is.na(kaggle.features))
+
+sum(is.na(training.classes))
+```
+
+### Training and Kaggle Sets
+
+```{r}
+kaggle.classes <- data.frame()
+
+for (drug_idx in 1:nrow(training.classes))
+{
+  training.features_train <- training.features
+  training.classes_train <- training.classes[drug_idx,]
+  
+  ### Cross Validation Loop
+  
+  # variables to store loop results
+  x.cv_mhc <- NA
+  x.cv_err <- Inf
+  x.cv_svm <- NA
+  
+  for (cv_idx in seq(1:3)) {
+    ### Split Training & Validation sets with random sampling (Monte Carlo cross validation)
+    print(c(cv_idx,'Split Training & Validation sets'))
+    
+    # 5-fold Cross Validation
+    index <-
+      sample(1:ncol(training.features_train),round(0.9 * ncol(training.features_train)))
+    training.features_train_cv <- training.features_train[,index]
+    training.classes_train_cv <- training.classes_train[index]
+    training.features_validation_cv <-
+      training.features_train[,-index]
+    training.classes_validation_cv <- training.classes_train[-index]
+    
+    ### Wilcoxan Rank Sum (Univariate Nonparametric Filter) for x dataset
+    print(c(cv_idx,'Wilcoxan Rank Sum'))
+    
+    x.P_LIM = .01
+    x.train_w_idx = vector()
+    x.train_p_val = vector()
+    
+    for (i in 1:nrow(training.features_train_cv)) {
+      x.w <-
+        wilcox.test(unlist(training.features_train_cv[i,]) ~ training.classes_train_cv, data =
+                      training.features_train_cv)
+      if (x.w$p.value < x.P_LIM) {
+        x.train_w_idx <-append(x.train_w_idx,i)
+        x.train_p_val <- append(x.train_p_val,x.w$p.value)
+        print(c(x.w$p.value,"sufficient p-value for",i))
+      }
+    }
+    
+    print("wilcox complete.")
+    
+    if (x.train_w_idx %>% length > 0)
+    {
+      # can't build a bayesian net with > 50 nodes
+      if(x.train_w_idx %>% length > 50){
+        print(c("> 50 features with p-values <",x.P_LIM,"... trimming to 50..."))
+        x.train_w_idx <- x.train_w_idx[order(as.double(x.train_p_val))[1:50]]
+      }
+      
+      #now we can retain only our selected columns
+      training.features_train_w <-
+        training.features_train_cv[x.train_w_idx,]
+      
+      #add the class labels to the feature data frame
+      training.net_input <-
+        data.frame(t(training.features_train_w),check.names = FALSE)
+      
+      training.net_input["class"] <- training.classes_train_cv
+      
+      ### Bayesian Net Construction (Multivariate Nonparametric Filter)
+      print(c(cv_idx,'Bayesian Net Construction'))
+      
+      print(training.net_input %>% dim())
+      
+      training.hc <- hc(training.net_input)
+      
+      ### Markov Blanket Filter
+      print(c(cv_idx,'Markov Blanket'))
+      
+      x.mhc <- mb(training.hc,node = "class")
+      
+      ### SVM
+      print(c(cv_idx,'SVM'))
+      
+      #change to markov blanket features
+      training.train_svm_input <-
+        data.frame(t(training.features_train_w[x.mhc,]), check.names = FALSE)
+      
+      #train model
+      x.model <-
+        svm(x = training.train_svm_input,y = training.classes_train_cv,kernel="linear")
+      
+      ### Validation (on hold out data)
+      print(c(cv_idx,'Validation'))
+      
+      #filter features
+      training.validation_svm_input <-
+        data.frame(t(training.features_validation_cv[x.mhc,]), check.names = FALSE)
+      
+      #test
+      x.class_ag <-
+        table(round(predict(
+          x.model,training.validation_svm_input
+        )),training.classes_validation_cv) %>%
+        classAgreement()
+      
+      #misclassification rate
+      x.err_rate <- 1 - x.class_ag$diag
+      
+      print(c(cv_idx,'cv error rate:',x.err_rate))
+      
+      if (x.err_rate < x.cv_err) {
+        x.cv_mhc <- x.mhc
+        x.cv_err <- x.err_rate
+        x.cv_svm <- x.model
+      }
+      
+      if (x.err_rate == 0) {
+        print("err_rate 0 reported, breaking out of loop...")
+        break
+      }
+      
+    }else{
+      print(
+        "Ignoring this cv loop because wilcoxon rank sum routine filtered all features from fold. Is the wilcoxon rank sum p-value set too low?"
+      )
+    }
+  }
+  
+  ### Loop Results
+  
+  # markov blanket, & error rate
+  print(c(x.cv_mhc,"best cv error rate:",x.cv_err))
+  
+  ### Predict Kaggle Holdout
+  
+  #filter features
+  kaggle.svm_input <-
+    data.frame(t(kaggle.features[x.cv_mhc,]), check.names = FALSE)
+  
+  #test
+  kaggle.predictions <- predict(x.cv_svm,kaggle.svm_input)
+  
+  kaggle.classes <- rbind(kaggle.classes,kaggle.predictions)
+}
+
+rownames(kaggle.classes) <- rownames(training.classes)
+colnames(kaggle.classes) <- colnames(kaggle.features)
+
+kaggle.classes %>% str()
+```
+
+```{r}
+mapping <- read.csv("../data/scoring_and_test_set_id_mappings.csv",check.names=FALSE)
+
+kaggle.out <- data.frame()
+
+for(row in 1:nrow(mapping))
+{
+  kaggle.out <- rbind(kaggle.out,c(mapping[row,"id"],kaggle.classes[mapping[row,"drug"],mapping[row,"cellline"]]))
+}
+colnames(kaggle.out)<-c('id','value')
+
+fptr <- file(description="./linearSVM_out.csv",'w')
+write.csv(kaggle.out,fptr,row.names=FALSE, quote = FALSE)
+close(fptr)
+```

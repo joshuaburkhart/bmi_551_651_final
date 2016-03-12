@@ -1,0 +1,65 @@
+---
+title: "Posterior Ensemble"
+author: "JB edited by MK"
+date: "March 7, 2016"
+output: 
+  pdf_document: 
+    fig_width: 9
+    fig_height: 6
+    latex_engine: xelatex
+---
+# Ensemble with 2 ELMs and randomForest
+
+```{r global_options, echo=FALSE, include=FALSE, error=FALSE}
+knitr::opts_chunk$set(
+  fig.path = "Figs/",
+  message = FALSE,
+  warning = FALSE,
+  include = TRUE,
+  echo = TRUE,
+  error = TRUE,
+  fig.width = 11,
+  comment = NA
+)
+```
+
+```{r, echo=FALSE, include=FALSE}
+library(MASS)
+library(plyr) #this must be loaded before dplyr
+library(dplyr)
+library(ggplot2)
+library(broom)
+library(knitr)
+library(magrittr)
+library(reshape2)
+library(infotheo)
+library(stats)
+library(car)
+library(e1071)
+library(bnlearn)
+library(elmNN)
+library(gbm)
+library(stats)
+set.seed(2013)
+```
+
+## Load Results
+```{r}
+setwd("~/R/bmi_551_651_final")
+
+res.1 <- read.csv("~/R/bmi_551_651_final/JoshBeta/tuningELM_out.csv")
+res.2 <- read.csv("~/R/bmi_551_651_final/JoshBeta/radbasELM_out.csv")
+res.3 <- read.csv("~/R/bmi_551_651_final/MarkBeta/randomForest3.csv")
+posterior.res <- t(rbind(res.1[,1],(res.1[,2]*3 + res.2[,2])/4)) #0.654 ! lol. but this is meaningful
+#posterior.res <- t(rbind(res.1[,1],(res.1[,2]*2 + res.2[,2])/3)) #0.65
+#posterior.res <- t(rbind(res.1[,1],(res.1[,2]*2 + res.2[,2] + res.3[,2])/4)) #0.63
+#posterior.res <- t(rbind(res.1[,1],(res.1[,2] + res.2[,2] + res.3[,2])/3)) #0.62
+
+colnames(posterior.res) <- colnames(res.1)
+```
+
+```{r}
+fptr <- file(description="~/R/bmi_551_651_final/MarkBeta/MK_posteriorEnsemble_weightexp2_out.csv",'w')
+write.csv(posterior.res,fptr,row.names=FALSE, quote = FALSE)
+close(fptr)
+```
