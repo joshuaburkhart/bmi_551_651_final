@@ -1,0 +1,151 @@
+---
+title: "Feature Selector"
+author: "Joshua Burkhart"
+date: "March 15, 2016"
+output: 
+  pdf_document: 
+    fig_width: 9
+    fig_height: 6
+    latex_engine: xelatex
+---
+# BMI 651: Feature Selector
+
+```{r global_options, echo=FALSE, include=FALSE, error=FALSE}
+knitr::opts_chunk$set(
+  fig.path = "Figs/",
+  message = FALSE,
+  warning = FALSE,
+  include = TRUE,
+  echo = TRUE,
+  error = TRUE,
+  fig.width = 11,
+  comment = NA
+)
+```
+
+```{r, echo=FALSE, include=FALSE}
+library(MASS)
+library(plyr) #this must be loaded before dplyr
+library(dplyr)
+library(ggplot2)
+library(broom)
+library(knitr)
+library(magrittr)
+library(reshape2)
+library(infotheo)
+library(stats)
+library(car)
+library(e1071)
+library(bnlearn)
+library(elmNN)
+set.seed(2013)
+```
+
+### Load Data
+
+```{r}
+setwd("~/SoftwareProjects/bmi_551_651_final/JoshBeta")
+
+# gene id cols, cell line rows
+expression <-
+  read.table(
+    "../data/expression.tsv",header = TRUE,sep = "\t",quote = "",row.names =
+      1,check.names = FALSE,stringsAsFactors = FALSE
+  )
+
+# subtype cols, cell line rows
+subtypes <-
+  read.table(
+    "../data/subtypes.txt",header = TRUE,sep = "\t",row.names = 1,check.names =
+      TRUE
+  )
+subtypes[,1] <- subtypes[,1] %>% as.numeric()
+
+for(subtype_num in 1:max(subtypes[,1]))
+{
+  zeros <- rep(0,nrow(subtypes))
+  zeros[which(subtypes[,1] %>% as.numeric() == subtype_num)] <- 1
+  subtypes <- cbind(subtypes,zeros)
+}
+
+# drug cols, cell line rows
+training.classes <-
+  t(
+    read.table(
+      "../data/training_set_answers.txt",header = TRUE,sep = "\t",check.names = FALSE
+    )
+  )
+training.classes[,1:ncol(training.classes)] <-
+  training.classes[,1:ncol(training.classes)] %>% as.numeric()
+
+# Usage, id, drug, cell line columns, values in rows
+scoring_and_test_set_id_mappings <-
+  read.table(
+    "../data/scoring_and_test_set_id_mappings.csv",header = TRUE,sep = ",",check.names =
+      FALSE
+  )
+
+sae <- expression
+
+for(subtype_num in 2:(max(subtypes[,1])+1))
+{
+  # organize subtypes, expression, train, test, classes...
+  subtype_df <- data.frame(t(subtypes[,subtype_num]),check.names = FALSE)
+  colnames(subtype_df) <- colnames(expression)
+  sae <- rbind(subtype_df,sae)
+}
+
+# split training data and kaggle holdout
+training.features <- sae[,colnames(training.classes)]
+kaggle.features <-
+  sae[setdiff(colnames(sae),colnames(training.classes))]
+```
+
+### Scan for missing Data
+
+```{r}
+sum(is.na(training.features))
+sum(is.na(kaggle.features))
+
+sum(is.na(training.classes))
+```
+
+### Wilcoxon Rank Sum
+
+```{r}
+x.all_features = list()
+
+for (drug_idx in 1:nrow(training.classes))
+{
+  training.features_train <- training.features
+  training.classes_train <- training.classes[drug_idx,]
+  
+  ### Wilcoxan Rank Sum (Univariate Nonparametric Filter) for x dataset
+  print(c('Wilcoxan Rank Sum: ',drug_idx))
+  
+  x.P_LIM = .01
+  x.train_w_idx = vector()
+  x.train_p_val = vector()
+  
+  for (i in 1:nrow(training.features_train)) {
+    x.w <-
+      wilcox.test(unlist(training.features_train[i,]) ~ training.classes_train, data =
+                    training.features_train)
+    if (x.w$p.value < x.P_LIM) {
+      x.train_w_idx <-append(x.train_w_idx,i)
+      x.train_p_val <- append(x.train_p_val,x.w$p.value)
+    }
+  }
+  x.all_features[[length(x.all_features)+1]] <- x.train_w_idx
+}
+```
+
+```{r}
+fptr <- file(description="./featureSelector_out.csv",'w')
+for(drug_idx in 1:length(x.all_features))
+{
+  write.csv(drug_idx,fptr,row.names=FALSE, quote = FALSE)
+  write.csv(x.all_features[drug_idx],fptr,row.names=FALSE, quote = FALSE)
+}
+close(fptr)
+```
