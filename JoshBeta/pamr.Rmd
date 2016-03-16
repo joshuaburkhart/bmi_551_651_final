@@ -1,0 +1,157 @@
+---
+title: "Pamr ELM"
+author: "Joshua Burkhart"
+date: "March 15, 2016"
+output: 
+  pdf_document: 
+    fig_width: 9
+    fig_height: 6
+    latex_engine: xelatex
+---
+# BMI 651: Pamr ELM
+
+```{r global_options, echo=FALSE, include=FALSE, error=FALSE}
+knitr::opts_chunk$set(
+  fig.path = "Figs/",
+  message = FALSE,
+  warning = FALSE,
+  include = TRUE,
+  echo = TRUE,
+  error = TRUE,
+  fig.width = 11,
+  comment = NA
+)
+```
+
+```{r, echo=FALSE, include=FALSE}
+library(MASS)
+library(plyr) #this must be loaded before dplyr
+library(dplyr)
+library(ggplot2)
+library(broom)
+library(knitr)
+library(magrittr)
+library(reshape2)
+library(infotheo)
+library(stats)
+library(car)
+library(e1071)
+library(bnlearn)
+library(elmNN)
+library(gbm)
+library(stats)
+library(pamr)
+set.seed(2013)
+```
+
+### Load Data
+
+```{r}
+setwd("~/SoftwareProjects/bmi_551_651_final/JoshBeta")
+
+# gene id cols, cell line rows
+expression <-
+  read.table(
+    "../data/expression.tsv",header = TRUE,sep = "\t",quote = "",row.names =
+      1,check.names = FALSE,stringsAsFactors = FALSE
+  )
+
+# subtype cols, cell line rows
+subtypes <-
+  read.table(
+    "../data/subtypes.txt",header = TRUE,sep = "\t",row.names = 1,check.names =
+      TRUE
+  )
+subtypes[,1] <- subtypes[,1] %>% as.numeric()
+
+# drug cols, cell line rows
+training.classes <-
+  t(
+    read.table(
+      "../data/training_set_answers.txt",header = TRUE,sep = "\t",check.names = FALSE
+    )
+  )
+training.classes[,1:ncol(training.classes)] <-
+  training.classes[,1:ncol(training.classes)] %>% as.numeric()
+
+# Usage, id, drug, cell line columns, values in rows
+scoring_and_test_set_id_mappings <-
+  read.table(
+    "../data/scoring_and_test_set_id_mappings.csv",header = TRUE,sep = ",",check.names =
+      FALSE
+  )
+
+# organize subtypes, expression, train, test, classes...
+sae <- rbind(data.frame(t(subtypes),check.names = FALSE),expression)
+
+# split training data and kaggle holdout
+training.features <- sae[,colnames(training.classes)]
+kaggle.features <-
+  sae[setdiff(colnames(sae),colnames(training.classes))]
+```
+
+### Scan for missing Data
+
+```{r}
+sum(is.na(training.features))
+sum(is.na(kaggle.features))
+
+sum(is.na(training.classes))
+```
+
+```{r}
+kaggle.classes <- data.frame()
+
+for (drug_idx in 1:nrow(training.classes))
+{
+  gene_names <- training.features %>% rownames()
+  gID <- training.features %>% rownames()
+  sID <- training.features %>% colnames()
+  train.dat <-
+    list(
+      x = as.matrix(training.features), y = training.classes[drug_idx,], genenames = gene_names, geneid = gID,sampleid = sID
+    )
+  #generate model and threshold values
+  pam_model <- pamr.train(train.dat)
+  pam_model
+  
+  #compute cross validation error
+  pam_model.cv <- pamr.cv(pam_model, train.dat, nfold = 5)
+  
+  min_err_idx <- which(pam_model$errors==min(pam_model$errors))
+  t0 <- pam_model.cv$threshold[min_err_idx]
+  
+  #confusion matrix
+  pamr.confusion(pam_model.cv, t0)
+  
+  ### Predict Kaggle Holdout
+
+  kaggle.predictions <- as.matrix(pamr.predict(pam_model, as.matrix(kaggle.features), t0))
+  
+  kaggle.classes <-
+    rbind(kaggle.classes,unlist(lapply(kaggle.predictions[,1] %>% as.numeric(),function(x) {
+      ifelse(x < 0,0,ifelse(x > 1,1,x))
+    })))
+}
+
+rownames(kaggle.classes) <- rownames(training.classes)
+colnames(kaggle.classes) <- colnames(kaggle.features)
+
+kaggle.classes %>% str()
+```
+
+```{r}
+mapping <- read.csv("../data/scoring_and_test_set_id_mappings.csv",check.names=FALSE)
+
+kaggle.out <- data.frame()
+
+for(row in 1:nrow(mapping))
+{
+  kaggle.out <- rbind(kaggle.out,c(mapping[row,"id"],kaggle.classes[mapping[row,"drug"],mapping[row,"cellline"]]))
+}
+colnames(kaggle.out)<-c('id','value')
+
+fptr <- file(description="./pamr_out.csv",'w')
+write.csv(kaggle.out,fptr,row.names=FALSE, quote = FALSE)
+close(fptr)
+```
