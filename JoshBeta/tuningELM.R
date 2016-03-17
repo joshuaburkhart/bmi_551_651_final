@@ -75,13 +75,6 @@ training.features <- sae[,colnames(training.classes)]
 kaggle.features <-
 sae[setdiff(colnames(sae),colnames(training.classes))]
 
-### Scan for missing Data
-
-sum(is.na(training.features))
-sum(is.na(kaggle.features))
-
-sum(is.na(training.classes))
-
 print("Loading feature indeces...")
 x.all_features <- vector("list",12)
 x.all_features[[1]] <-
@@ -140,33 +133,41 @@ print("done.")
 kaggle.classes <- data.frame()
 training.features_train <- data.frame()
 training.classes_train <- numeric()
-x.cv_mhc <- NA
 x.cv_err <- Inf
-x.cv_elm <- NA
 training.features_ncol <- numeric()
 x.loop = NA
-x.elm_actv = NA
 x.cv_boost <- numeric()
-x.avg_err <- 1
-x.SPLIT <- 0.4
+x.all_drug_min_errs <- numeric()
+x.SPLIT <- 0.8
 
 for (drug_idx in 1:nrow(training.classes))
 {
-    training.features_train <- cbind(cbind(cbind(training.features,training.features),training.features),training.features)
-    training.classes_train <- c(c(c(training.classes[drug_idx,],training.classes[drug_idx,]),training.classes[drug_idx,]),training.classes[drug_idx,])
+    training.features_train <- cbind(
+                                cbind(
+                                cbind(
+                                cbind(
+                                 cbind(training.features,training.features),
+                                 training.features),
+                                training.features),
+                                training.features),
+                                training.features)
+    training.classes_train <- c(c(c(
+                                c(
+                                    c(training.classes[drug_idx,],
+                                    training.classes[drug_idx,]),
+                                    training.classes[drug_idx,]),
+                                training.classes[drug_idx,]),
+                                training.classes[drug_idx,]),
+                                training.classes[drug_idx,])
 
     ### Cross Validation Loop
 
     # variables to store loop results
-    x.cv_mhc <- NA
     x.cv_err <- Inf
-    x.cv_elm <- NA
     training.features_ncol <- round(x.SPLIT * ncol(training.features_train))
     x.cv_boost <- rep(1 / ncol(training.features_train),ncol(training.features_train))
-    x.tot_err <- vector()
     x.loop_models <- list(type=any)
     prev_avg <- NA
-    x.all_features_cv <- x.all_features[[drug_idx]]
 
     for (loop in seq(1:100))
     {
@@ -180,16 +181,8 @@ for (drug_idx in 1:nrow(training.classes))
         x <- seq(ncol(training.features_train))
         negative_idxs <- match(sample(x[-index],round((1-x.SPLIT) * ncol(training.features_train))),x)
 
-        print(c("length negative idxs",length(negative_idxs)))
-
         training.features_validation_cv <- training.features_train[,negative_idxs]
         training.classes_validation_cv <- training.classes_train[negative_idxs]
-
-        print(c("dim training.features_train",dim(training.features_train)))
-        print(c("dim training.features_train[,index]",dim(training.features_train[,index])))
-        print(c("dim training.features_train[,-index]",dim(training.features_train[,-index])))
-
-        print(c("dim training.features_validation_cv 1",dim(training.features_validation_cv)))
 
         elm_actv <- "radbas"
         #c(
@@ -198,9 +191,7 @@ for (drug_idx in 1:nrow(training.classes))
 
         #now we can retain only our selected columns
         training.features_train_w <-
-        training.features_train_cv[x.all_features_cv,]
-
-        print(c("dim training.features_validation_cv 2",dim(training.features_validation_cv)))
+        training.features_train_cv[x.all_features[[drug_idx]],]
 
         #add the class labels to the feature data frame
         training.train_elm_input <-
@@ -218,27 +209,15 @@ for (drug_idx in 1:nrow(training.classes))
 
         #filter features
         training.validation_elm_input <-
-        data.frame(t(training.features_validation_cv[x.all_features_cv,]), check.names = FALSE)
+        data.frame(t(training.features_validation_cv[x.all_features[[drug_idx]],]), check.names = FALSE)
 
         x.prediction_cv <-
         predict(x.model,training.validation_elm_input)[,1]
 
-    print(c("loop:",loop))
-    #print(c("prev_avg:",prev_avg))
-    #print(c("x.prediction_cv:",x.prediction_cv))
-    print(c("length prev_avg",length(prev_avg)))
-    print(c("length x.prediction_cv",length(x.prediction_cv)))
-    print(c("length index",length(index)))
-    print(c("length x.cv_boost",length(x.cv_boost)))
-    print(c("length training.features_train_cv",length(training.features_train_cv)))
-    print(c("length training.features_validation_cv",length(training.features_validation_cv)))
-    print(c("dim training.features_train",dim(training.features_train)))
-
         if(loop > 1)
         {
             prev_avg <- (((loop - 1)/loop) * prev_avg + (1/loop) *  x.prediction_cv)
-        }else # loop is 1
-        {
+        }else{ # loop is 1
             prev_avg <- x.prediction_cv
         }
 
@@ -250,36 +229,35 @@ for (drug_idx in 1:nrow(training.classes))
         #misclassification rate
         x.err_rate <- 1 - x.class_ag$diag
 
-        #print(c('cv error rate:',x.err_rate))
+        #print(c("loop",loop,"error rate:",x.err_rate))
 
-        x.tot_err <- c(x.tot_err,x.err_rate)
-
-        if (x.err_rate < x.cv_err) {
-            x.cv_mhc <- x.all_features_cv
+        if (loop > 33 && x.err_rate < x.cv_err) {
             x.cv_err <- x.err_rate
-            x.cv_elm <- x.model
             x.loop <- loop
-            x.elm_actv <- elm_actv
         }
 
         ### Boosting probabilities
-        x.cv_boost[-index] <- abs(x.cv_boost[-index] * 2)
+        miscalled_idxs <- which(abs(round(prev_avg) - training.classes_validation_cv)>0)
+        x.cv_boost[miscalled_idxs] <- abs(x.cv_boost[miscalled_idxs] * 1.2)
     }
-    x.avg_err <- c(x.avg_err,x.cv_err)
+    x.all_drug_min_errs <- c(x.all_drug_min_errs,x.cv_err)
 
-    print(c("loop:",loop,'avg_err:', x.cv_err))
+    print(c("drug:",drug_idx,"loop:",x.loop,'min drug err:', x.cv_err))#,"x.cv_boost:",x.cv_boost,"prev_avg:",prev_avg))
 
     ### Predict Kaggle Holdout
 
     #filter features
     kaggle.elm_input <-
-    data.frame(t(kaggle.features[x.cv_mhc,]), check.names = FALSE)
+    data.frame(t(kaggle.features[x.all_features[[drug_idx]],]), check.names = FALSE)
 
-    kaggle.predictions <- predict(x.loop_models[[1]],kaggle.elm_input) / x.loop
+    kaggle.predictions <- (predict(x.loop_models[[1]],kaggle.elm_input) / x.loop)
     for(loop_it in 2:x.loop)
     {
-        kaggle.predictions <- kaggle.predictions + predict(x.loop_models[[loop_it]],kaggle.elm_input) / x.loop
+        kaggle.predictions <- (kaggle.predictions + predict(x.loop_models[[loop_it]],kaggle.elm_input) / x.loop)
     }
+
+    #print(c("kaggle.predictions",kaggle.predictions))
+
     kaggle.classes <- rbind(kaggle.classes,round(unlist(
     lapply(kaggle.predictions[,1],function(x) {
         ifelse(x < 0,0,ifelse(x > 1,1,x))
@@ -305,6 +283,6 @@ close(fptr)
 
 print(
 c(
-"loop:",drug_idx,"errs:",x.avg_err,"avg_err:",sum(x.avg_err) / length(x.avg_err),"actfun:",x.elm_actv
+    "all drug min errs:",x.all_drug_min_errs,"avg_err:",sum(x.all_drug_min_errs) / length(x.all_drug_min_errs)
 )
 )
