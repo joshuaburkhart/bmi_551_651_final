@@ -176,8 +176,14 @@ for (drug_idx in 1:nrow(training.classes))
         index <- sample(1:ncol(training.features_train),round(x.SPLIT * ncol(training.features_train)),replace=TRUE,prob=x.cv_boost)
         training.features_train_cv <- training.features_train[,index]
         training.classes_train_cv <- training.classes_train[index]
-        training.features_validation_cv <- training.features_train[,-index]
-        training.classes_validation_cv <- training.classes_train[-index]
+
+        x <- seq(ncol(training.features_train))
+        negative_idxs <- match(sample(x[-index],round((1-x.SPLIT) * ncol(training.features_train))),x)
+
+        print(c("length negative idxs",length(negative_idxs)))
+
+        training.features_validation_cv <- training.features_train[,negative_idxs]
+        training.classes_validation_cv <- training.classes_train[negative_idxs]
 
         print(c("dim training.features_train",dim(training.features_train)))
         print(c("dim training.features_train[,index]",dim(training.features_train[,index])))
