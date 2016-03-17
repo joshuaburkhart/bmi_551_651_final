@@ -138,7 +138,7 @@ training.features_ncol <- numeric()
 x.loop = NA
 x.cv_boost <- numeric()
 x.all_drug_min_errs <- numeric()
-x.SPLIT <- 0.8
+x.SPLIT <- 0.5
 
 for (drug_idx in 1:nrow(training.classes))
 {
@@ -169,7 +169,7 @@ for (drug_idx in 1:nrow(training.classes))
     x.loop_models <- list(type=any)
     prev_avg <- NA
 
-    for (loop in seq(1:100))
+    for (loop in seq(1:30))
     {
         ### Split Training & Validation sets with random sampling (Monte Carlo cross validation)
 
@@ -210,22 +210,10 @@ for (drug_idx in 1:nrow(training.classes))
         training.validation_svm_input <-
         data.frame(t(training.features_validation_cv[x.all_features[[drug_idx]],]), check.names = FALSE)
 
-        x.prediction_cv <-
-        predict(x.model,training.validation_svm_input)
-
-        x.prediction_cv <- (x.prediction_cv - min(x.prediction_cv)) * (1/(max(x.prediction_cv)-min(x.prediction_cv)))
-
-        #print(c("x.prediction_cv",x.prediction_cv))
-
-        if(loop > 1)
-        {
-            prev_avg <- (((loop - 1)/loop) * prev_avg + (1/loop) *  x.prediction_cv)
-        }else{ # loop is 1
-            prev_avg <- x.prediction_cv
-        }
+        x.prediction_cv <- predict(x.model,training.validation_svm_input)
 
         x.class_ag <-
-        table(round(unlist(lapply(prev_avg,function(x) {
+        table(round(unlist(lapply(x.prediction_cv,function(x) {
             ifelse(x < 0,0,ifelse(x > 1,1,x))
         }))),training.classes_validation_cv) %>% classAgreement()
 
@@ -233,14 +221,11 @@ for (drug_idx in 1:nrow(training.classes))
         x.err_rate <- 1 - x.class_ag$diag
 
         print(c("loop",loop,"error rate:",x.err_rate))
-
-        if (loop > 33 && x.err_rate < x.cv_err) {
-            x.cv_err <- x.err_rate
-            x.loop <- loop
-        }
+        x.cv_err <- x.err_rate
+        x.loop <- loop
 
         ### Boosting probabilities
-        miscalled_idxs <- which(abs(round(prev_avg) - training.classes_validation_cv)>0)
+        miscalled_idxs <- which(abs(round(x.prediction_cv) - training.classes_validation_cv)>0)
         x.cv_boost[miscalled_idxs] <- abs(x.cv_boost[miscalled_idxs] * 1.2)
     }
     x.all_drug_min_errs <- c(x.all_drug_min_errs,x.cv_err)
