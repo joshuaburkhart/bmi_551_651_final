@@ -144,7 +144,7 @@ x.cv_mhc <- NA
 x.cv_err <- Inf
 x.cv_elm <- NA
 training.features_ncol <- numeric()
-x.elm_nhid = NA
+x.loop = NA
 x.elm_actv = NA
 x.cv_boost <- numeric()
 x.avg_err <- 1
@@ -152,8 +152,8 @@ x.SPLIT <- 0.4
 
 for (drug_idx in 1:nrow(training.classes))
 {
-  training.features_train <- cbind(cbind(cbind(training.features,training.features),training.features),training.features)
-  training.classes_train <- c(c(c(training.classes[drug_idx,],training.classes[drug_idx,]),training.classes[drug_idx,]),training.classes[drug_idx,])
+    training.features_train <- cbind(cbind(cbind(training.features,training.features),training.features),training.features)
+    training.classes_train <- c(c(c(training.classes[drug_idx,],training.classes[drug_idx,]),training.classes[drug_idx,]),training.classes[drug_idx,])
 
     ### Cross Validation Loop
 
@@ -164,6 +164,9 @@ for (drug_idx in 1:nrow(training.classes))
     training.features_ncol <- round(x.SPLIT * ncol(training.features_train))
     x.cv_boost <- rep(1 / ncol(training.features_train),ncol(training.features_train))
     x.tot_err <- vector()
+    x.loop_models <- list(type=any)
+    prev_avg <- NA
+    x.all_features_cv <- x.all_features[[drug_idx]]
 
     for (loop in seq(1:100))
     {
@@ -171,23 +174,27 @@ for (drug_idx in 1:nrow(training.classes))
 
         # Cross Validation
         index <- sample(1:ncol(training.features_train),round(x.SPLIT * ncol(training.features_train)),replace=TRUE,prob=x.cv_boost)
-        training.features_train_cv <-
-        training.features_train[,index]
+        training.features_train_cv <- training.features_train[,index]
         training.classes_train_cv <- training.classes_train[index]
-        training.features_validation_cv <-
-        training.features_train[,-index]
-        training.classes_validation_cv <-
-        training.classes_train[-index]
+        training.features_validation_cv <- training.features_train[,-index]
+        training.classes_validation_cv <- training.classes_train[-index]
 
-        elm_actv <-
-        c(
-        "sig","sin","radbas","hardlim","hardlims","satlins","tansig","tribas","poslin","purelin"
-        )[mod(loop + 2,10) + 1]
-        x.all_features_cv <- x.all_features[[drug_idx]]
+        print(c("dim training.features_train",dim(training.features_train)))
+        print(c("dim training.features_train[,index]",dim(training.features_train[,index])))
+        print(c("dim training.features_train[,-index]",dim(training.features_train[,-index])))
+
+        print(c("dim training.features_validation_cv 1",dim(training.features_validation_cv)))
+
+        elm_actv <- "radbas"
+        #c(
+        #"sig","sin","radbas","hardlim","hardlims","satlins","tansig","tribas","poslin","purelin"
+        #)[mod(loop + 2,10) + 1]
 
         #now we can retain only our selected columns
         training.features_train_w <-
         training.features_train_cv[x.all_features_cv,]
+
+        print(c("dim training.features_validation_cv 2",dim(training.features_validation_cv)))
 
         #add the class labels to the feature data frame
         training.train_elm_input <-
@@ -196,8 +203,10 @@ for (drug_idx in 1:nrow(training.classes))
         #train model
         x.model <-
         elmNN::elmtrain(
-        x = training.train_elm_input,y = training.classes_train_cv,nhid = 20,actfun = "sin"
+        x = training.train_elm_input,y = training.classes_train_cv,nhid = 20,actfun = elm_actv
         )
+
+        x.loop_models[[loop]] <- x.model
 
         ### Validation (on hold out data)
 
@@ -205,15 +214,32 @@ for (drug_idx in 1:nrow(training.classes))
         training.validation_elm_input <-
         data.frame(t(training.features_validation_cv[x.all_features_cv,]), check.names = FALSE)
 
-        #test
         x.prediction_cv <-
         predict(x.model,training.validation_elm_input)[,1]
 
+    print(c("loop:",loop))
+    #print(c("prev_avg:",prev_avg))
+    #print(c("x.prediction_cv:",x.prediction_cv))
+    print(c("length prev_avg",length(prev_avg)))
+    print(c("length x.prediction_cv",length(x.prediction_cv)))
+    print(c("length index",length(index)))
+    print(c("length x.cv_boost",length(x.cv_boost)))
+    print(c("length training.features_train_cv",length(training.features_train_cv)))
+    print(c("length training.features_validation_cv",length(training.features_validation_cv)))
+    print(c("dim training.features_train",dim(training.features_train)))
+
+        if(loop > 1)
+        {
+            prev_avg <- (((loop - 1)/loop) * prev_avg + (1/loop) *  x.prediction_cv)
+        }else # loop is 1
+        {
+            prev_avg <- x.prediction_cv
+        }
+
         x.class_ag <-
-        table(round(unlist(lapply(x.prediction_cv,function(x) {
+        table(round(unlist(lapply(prev_avg,function(x) {
             ifelse(x < 0,0,ifelse(x > 1,1,x))
-        }))),training.classes_validation_cv) %>%
-            classAgreement()
+        }))),training.classes_validation_cv) %>% classAgreement()
 
         #misclassification rate
         x.err_rate <- 1 - x.class_ag$diag
@@ -226,7 +252,7 @@ for (drug_idx in 1:nrow(training.classes))
             x.cv_mhc <- x.all_features_cv
             x.cv_err <- x.err_rate
             x.cv_elm <- x.model
-            x.elm_nhid <- loop
+            x.loop <- loop
             x.elm_actv <- elm_actv
         }
 
@@ -243,11 +269,12 @@ for (drug_idx in 1:nrow(training.classes))
     kaggle.elm_input <-
     data.frame(t(kaggle.features[x.cv_mhc,]), check.names = FALSE)
 
-    #test
-    kaggle.predictions <-
-    predict(x.cv_elm,kaggle.elm_input)
-    kaggle.classes <-
-    rbind(kaggle.classes,round(unlist(
+    kaggle.predictions <- predict(x.loop_models[[1]],kaggle.elm_input) / x.loop
+    for(loop_it in 2:x.loop)
+    {
+        kaggle.predictions <- kaggle.predictions + predict(x.loop_models[[loop_it]],kaggle.elm_input) / x.loop
+    }
+    kaggle.classes <- rbind(kaggle.classes,round(unlist(
     lapply(kaggle.predictions[,1],function(x) {
         ifelse(x < 0,0,ifelse(x > 1,1,x))
     })
@@ -272,6 +299,6 @@ close(fptr)
 
 print(
 c(
-"loop:",drug_idx,"errs:",x.avg_err,"avg_err:",sum(x.avg_err) / length(x.avg_err),"elm_nhid",x.elm_nhid,"actfun:",x.elm_actv
+"loop:",drug_idx,"errs:",x.avg_err,"avg_err:",sum(x.avg_err) / length(x.avg_err),"actfun:",x.elm_actv
 )
 )
