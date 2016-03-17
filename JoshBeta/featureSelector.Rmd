@@ -123,7 +123,7 @@ for (drug_idx in 1:nrow(training.classes))
   ### Wilcoxan Rank Sum (Univariate Nonparametric Filter) for x dataset
   print(c('Wilcoxan Rank Sum: ',drug_idx))
   
-  x.P_LIM = .01
+  x.P_LIM = .005
   x.train_w_idx = vector()
   x.train_p_val = vector()
   
