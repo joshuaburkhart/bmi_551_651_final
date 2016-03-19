@@ -169,7 +169,7 @@ for (drug_idx in 1:nrow(training.classes))
     x.loop_models <- list(type=any)
     prev_avg <- NA
 
-    for (loop in seq(1:100))
+    for (loop in seq(1:40))
     {
         ### Split Training & Validation sets with random sampling (Monte Carlo cross validation)
 
@@ -211,34 +211,23 @@ for (drug_idx in 1:nrow(training.classes))
         training.validation_elm_input <-
         data.frame(t(training.features_validation_cv[x.all_features[[drug_idx]],]), check.names = FALSE)
 
-        x.prediction_cv <-
-        predict(x.model,training.validation_elm_input)[,1]
-
-        if(loop > 1)
-        {
-            prev_avg <- (((loop - 1)/loop) * prev_avg + (1/loop) *  x.prediction_cv)
-        }else{ # loop is 1
-            prev_avg <- x.prediction_cv
-        }
+        x.prediction_cv <- predict(x.loop_models[[loop]],training.validation_elm_input)[,1]
 
         x.class_ag <-
-        table(round(unlist(lapply(prev_avg,function(x) {
+        classAgreement(table(round(unlist(lapply(x.prediction_cv,function(x) {
             ifelse(x < 0,0,ifelse(x > 1,1,x))
-        }))),training.classes_validation_cv) %>% classAgreement()
+        }))),training.classes_validation_cv))
 
         #misclassification rate
         x.err_rate <- 1 - x.class_ag$diag
 
         #print(c("loop",loop,"error rate:",x.err_rate))
-
-        if (loop > 33 && x.err_rate < x.cv_err) {
-            x.cv_err <- x.err_rate
-            x.loop <- loop
-        }
+        x.cv_err <- x.err_rate
+        x.loop <- loop
 
         ### Boosting probabilities
         miscalled_idxs <- which(abs(round(prev_avg) - training.classes_validation_cv)>0)
-        x.cv_boost[miscalled_idxs] <- abs(x.cv_boost[miscalled_idxs] * 1.2)
+        x.cv_boost[miscalled_idxs] <- abs(x.cv_boost[miscalled_idxs] * 1.05)
     }
     x.all_drug_min_errs <- c(x.all_drug_min_errs,x.cv_err)
 
@@ -250,16 +239,20 @@ for (drug_idx in 1:nrow(training.classes))
     kaggle.elm_input <-
     data.frame(t(kaggle.features[x.all_features[[drug_idx]],]), check.names = FALSE)
 
-    kaggle.predictions <- (predict(x.loop_models[[1]],kaggle.elm_input) / x.loop)
+    kaggle.predictions <- (predict(x.loop_models[[1]],kaggle.elm_input)[,1] / x.loop)
+    kaggle.predictions <- unlist(lapply(kaggle.predictions,function(w){ifelse(w > 1,1,w)}))
+    kaggle.predictions <- unlist(lapply(kaggle.predictions,function(z){ifelse(z < 0,0,z)}))
     for(loop_it in 2:x.loop)
     {
-        kaggle.predictions <- (kaggle.predictions + predict(x.loop_models[[loop_it]],kaggle.elm_input) / x.loop)
+        kaggle.predictions <- (kaggle.predictions + predict(x.loop_models[[loop_it]],kaggle.elm_input)[,1] / x.loop)
+        kaggle.predictions <- unlist(lapply(kaggle.predictions,function(w){ifelse(w > 1,1,w)}))
+        kaggle.predictions <- unlist(lapply(kaggle.predictions,function(z){ifelse(z < 0,0,z)}))
     }
 
     #print(c("kaggle.predictions",kaggle.predictions))
 
     kaggle.classes <- rbind(kaggle.classes,round(unlist(
-    lapply(kaggle.predictions[,1],function(x) {
+    lapply(kaggle.predictions,function(x) {
         ifelse(x < 0,0,ifelse(x > 1,1,x))
     })
     )))

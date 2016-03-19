@@ -68,6 +68,22 @@ for(subtype_num in 1:max(subtypes[,1]))
   subtypes <- cbind(subtypes,zeros)
 }
 
+# Kristen's celltypes
+celltypes <- data.frame(
+    t(
+        read.table("../data/cell_type_classifications.txt",
+                    header=TRUE,
+                    sep="\t",
+                    check.names=FALSE,
+                    row.names=1)
+    ),
+    check.names = FALSE)
+
+for (celltype in 1:ncol(celltypes))
+{
+    celltypes[,celltype] <- as.numeric(celltypes[,celltype])
+}
+
 # drug cols, cell line rows
 training.classes <-
   t(
@@ -95,10 +111,16 @@ for(subtype_num in 2:(max(subtypes[,1])+1))
   sae <- rbind(subtype_df,sae)
 }
 
+x.nrow_before_celltypes <- nrow(sae)
+
+sae <- rbind(sae,celltypes)
+
+x.nrow_after_celltypes <- nrow(sae)
+x.celltype_rows <- ((x.nrow_before_celltypes+1):x.nrow_after_celltypes)
+
 # split training data and kaggle holdout
 training.features <- sae[,colnames(training.classes)]
-kaggle.features <-
-  sae[setdiff(colnames(sae),colnames(training.classes))]
+kaggle.features <- sae[setdiff(colnames(sae),colnames(training.classes))]
 ```
 
 ### Scan for missing Data
@@ -113,17 +135,20 @@ sum(is.na(training.classes))
 ### Wilcoxon Rank Sum
 
 ```{r}
+x.TRIM = 100
+
 x.all_features = list()
 
-for (drug_idx in 1:nrow(training.classes))
+for (drug_idx in 1:nrow(training.features))
 {
-  training.features_train <- training.features
+  for(sample in 1:ncol(training.features))
+  training.features_train <- training.features[]
   training.classes_train <- training.classes[drug_idx,]
   
   ### Wilcoxan Rank Sum (Univariate Nonparametric Filter) for x dataset
   print(c('Wilcoxan Rank Sum: ',drug_idx))
   
-  x.P_LIM = .005
+  x.P_LIM = .01
   x.train_w_idx = vector()
   x.train_p_val = vector()
   
@@ -131,12 +156,21 @@ for (drug_idx in 1:nrow(training.classes))
     x.w <-
       wilcox.test(unlist(training.features_train[i,]) ~ training.classes_train, data =
                     training.features_train)
-    if (x.w$p.value < x.P_LIM) {
-      x.train_w_idx <-append(x.train_w_idx,i)
-      x.train_p_val <- append(x.train_p_val,x.w$p.value)
+    if(!is.na(x.w$p.value))
+    {
+      if (x.w$p.value < x.P_LIM) {
+        x.train_w_idx <-append(x.train_w_idx,i)
+        x.train_p_val <- append(x.train_p_val,x.w$p.value)
+      }
     }
   }
-  x.all_features[[length(x.all_features)+1]] <- x.train_w_idx
+  # can't build a bayesian net with > x.TRIM nodes
+  if(x.train_w_idx %>% length > x.TRIM)
+  {
+    print(c("over",x.TRIM,"features with p-values <",x.P_LIM,"... trimming to",x.TRIM,"..."))
+    x.train_w_idx <- x.train_w_idx[order(as.double(x.train_p_val))[1:x.TRIM]]
+  }
+  x.all_features[[length(x.all_features)+1]] <- sort(x.train_w_idx)
 }
 ```
 
@@ -147,7 +181,7 @@ fptr <- file(description="./featureSelector_out.csv",'w')
 for(drug_idx in 1:length(x.all_features))
 {
   write.csv(drug_idx,fptr,row.names=FALSE, quote = FALSE)
-  write.csv(x.all_features[drug_idx],fptr,row.names=FALSE, quote = FALSE)
+  write.csv(x.all_features[drug_idx],fptr,row.names=FALSE, quote = FALSE,sep = ',')
 }
 close(fptr)
 ```
